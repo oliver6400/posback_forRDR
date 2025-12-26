@@ -21,9 +21,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-#CORS_ALLOWED_ORIGINS = [
-#    "http://localhost:5173",  # Tu frontend Vite
-#]
+CORS_ALLOWED_ORIGINS = [
+    "https://posfront-forrdr.onrender.com",  # Tu frontend Vite
+]
 
 STORAGES = {
     "default":{
