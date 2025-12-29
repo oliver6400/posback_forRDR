@@ -25,20 +25,15 @@ class SucursalViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 class PuntoVentaViewSet(viewsets.ModelViewSet):
-    queryset = PuntoVenta.objects.all() 
+    queryset = PuntoVenta.objects.all()
     serializer_class = PuntoVentaSerializer
     permission_classes = [IsAuthenticated]
- 
+
     def get_queryset(self):
-        # obtener sucursal desde la URL: /sucursales/<id>/puntos-venta/
-        sucursal_id = self.kwargs.get('sucursal_pk')
+        sucursal_id = self.request.query_params.get('sucursal')
         if sucursal_id:
             return PuntoVenta.objects.filter(sucursal_id=sucursal_id)
-        return PuntoVenta.objects.all()
-
-    def perform_create(self, serializer):
-        sucursal_id = self.kwargs.get('sucursal_pk')
-        serializer.save(sucursal_id=sucursal_id)
+        return super().get_queryset()
 
 class ClienteListView(viewsets.ViewSet):
     queryset = Cliente.objects.all()
