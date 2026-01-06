@@ -27,9 +27,9 @@ class InventarioSucursalAdmin(admin.ModelAdmin):
 
 @admin.register(MovimientoInventario)
 class MovimientoInventarioAdmin(admin.ModelAdmin):
-    list_display = ("id", "sucursal", "usuario", "fecha_hora", "tipo_movimiento", "origen_tipo", "origen_id")
+    list_display = ("id", "sucursal", "usuario", "fecha_hora", "tipo_movimiento")
     list_filter = ("sucursal", "tipo_movimiento", "fecha_hora")
-    search_fields = ("usuario__username", "origen_tipo", "origen_id")
+    search_fields = ("usuario__username", "sucursal__nombre")
     date_hierarchy = "fecha_hora"
     inlines = [MovimientoInventarioDetalleInline]
 

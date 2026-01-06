@@ -31,6 +31,8 @@ class ProductoSerializer(serializers.ModelSerializer):
 
 class InventarioSucursalSerializer(serializers.ModelSerializer):
     producto = serializers.PrimaryKeyRelatedField(queryset=Producto.objects.all())  # Asegúrate de usar solo el id
+    producto_nombre = serializers.CharField(source="producto.nombre", read_only=True)
+    sucursal_nombre = serializers.CharField(source="sucursal.nombre", read_only=True)
 
     class Meta:
         model = InventarioSucursal
@@ -40,10 +42,18 @@ class InventarioSucursalSerializer(serializers.ModelSerializer):
             "producto",
             "stock_actual",
             "stock_minimo",
+            "sucursal_nombre",
+            "producto_nombre",
         ]
 
 class MovimientoInventarioDetalleSerializer(serializers.ModelSerializer):
-    producto = ProductoSerializer(read_only=True)
+    producto = serializers.PrimaryKeyRelatedField(
+        queryset=Producto.objects.all()
+    )
+    producto_nombre = serializers.CharField(
+        source="producto.nombre",
+        read_only=True
+    )
 
     class Meta:
         model = MovimientoInventarioDetalle
@@ -51,6 +61,7 @@ class MovimientoInventarioDetalleSerializer(serializers.ModelSerializer):
             "id",
             "movimiento",
             "producto",
+            "producto_nombre",
             "cantidad",
             "costo_unitario",
         ]
@@ -66,8 +77,6 @@ class MovimientoInventarioSerializer(serializers.ModelSerializer):
             "usuario",
             "fecha_hora",
             "tipo_movimiento",
-            "origen_tipo",
-            "origen_id",
             "observacion",
             "detalles",
         ]
