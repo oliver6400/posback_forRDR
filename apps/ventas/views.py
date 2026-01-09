@@ -38,7 +38,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         arqueo = ArqueoCaja.objects.filter(
             punto_venta=punto_venta,
             usuario_apertura=usuario,
-            estado="Abierto"
+            estado="ABIERTA"
         ).first()
 
         if not arqueo:

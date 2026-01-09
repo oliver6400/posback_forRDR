@@ -19,32 +19,32 @@ class VentaSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("usuario", "total_bruto", "total_descuento", "total_neto")
 
-def validate(self, data):
-    usuario = self.context["request"].user
-    punto_venta = data.get("punto_venta")
-    sucursal = data.get("sucursal")
+    def validate(self, data):
+        usuario = self.context["request"].user
+        punto_venta = data.get("punto_venta")
+        sucursal = data.get("sucursal")
 
-    if not sucursal:
-        raise serializers.ValidationError("Debe seleccionar una sucursal.")
+        if not sucursal:
+            raise serializers.ValidationError("Debe seleccionar una sucursal.")
 
-    if not punto_venta:
-        raise serializers.ValidationError("Debe seleccionar un punto de venta.")
+        if not punto_venta:
+            raise serializers.ValidationError("Debe seleccionar un punto de venta.")
 
-    # Validar relación
-    if punto_venta.sucursal_id != sucursal.id:
-        raise serializers.ValidationError("El punto de venta no pertenece a esa sucursal.")
+        # Validar relación
+        if punto_venta.sucursal_id != sucursal.id:
+            raise serializers.ValidationError("El punto de venta no pertenece a esa sucursal.")
 
-    # Validar caja abierta
-    caja_abierta = ArqueoCaja.objects.filter(
-        usuario_apertura=usuario,
-        punto_venta=punto_venta,
-        estado="Abierto"
-    ).first()
+        # Validar caja abierta
+        caja_abierta = ArqueoCaja.objects.filter(
+            usuario_apertura=usuario,
+            punto_venta=punto_venta,
+            estado="ABIERTA"
+        ).first()
 
-    if not caja_abierta:
-        raise serializers.ValidationError("Debe aperturar una caja para este punto de venta.")
+        if not caja_abierta:
+            raise serializers.ValidationError("Debe aperturar una caja para este punto de venta.")
 
-    return data
+        return data
 
 
     @transaction.atomic

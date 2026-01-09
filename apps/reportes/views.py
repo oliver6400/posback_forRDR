@@ -73,24 +73,34 @@ class ArqueoCajaViewSet(viewsets.ModelViewSet):
         arqueo = self.get_object()
 
         if arqueo.estado != "ABIERTA":
-            return Response({"error": "Esta caja ya fue cerrada."}, status=400)
-        
-        # calcular monto sistema
+            return Response({"error": "La caja ya está cerrada."}, status=400)
+
+        if arqueo.usuario_apertura != request.user:
+            return Response(
+                {"error": "Solo el usuario que abrió la caja puede cerrarla."},
+                status=403
+            )
+
+        monto_final_real = request.data.get("monto_final_real")
+        if monto_final_real is None:
+            return Response({"error": "Debe enviar monto_final_real."}, status=400)
+
         ventas = Venta.objects.filter(
             punto_venta=arqueo.punto_venta,
-            fecha__gte=arqueo.fecha_apertura,
+            fecha_hora__gte=arqueo.fecha_apertura,
+            estado_venta__nombre="Pagada"
         )
-        monto_sistema = sum(venta.monto_total for venta in ventas)
 
+        monto_sistema = sum(v.total_neto for v in ventas)
         monto_final_sistema = arqueo.monto_inicial + monto_sistema
-        monto_final_real = request.data.get("monto_final_real")
-        diferencia = monto_final_sistema - monto_final_real
-        usuario_cierre = request.user
 
-        arqueo.cerrar(usuario_cierre, monto_real)
-        arqueo.estado = "CERRADA"
+        arqueo.cerrar(
+            usuario_cierre=request.user,
+            monto_final_real=monto_final_real,
+            monto_final_sistema=monto_final_sistema
+        )
 
-        return Response({"mensaje": "Caja cerrada exitosamente"}, status=200)
+        return Response({"mensaje": "Caja cerrada correctamente"}, status=200)
 
     # ✅ Acción: obtener caja abierta actual
     @action(detail=False, methods=['get'])

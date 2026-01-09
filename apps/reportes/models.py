@@ -36,7 +36,7 @@ class ArqueoCaja(models.Model):
     monto_final_sistema = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     monto_final_real = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     diferencia = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-    estado = models.CharField(max_length=20, choices=ESTADOS, default="CERRADA")
+    estado = models.CharField(max_length=10, choices=ESTADOS, default="ABIERTA")
 
     class Meta:
         app_label = 'reportes'
@@ -47,10 +47,12 @@ class ArqueoCaja(models.Model):
     def __str__(self):
         return f"Arqueo {self.id} - {self.punto_venta.nombre} - {self.usuario_apertura.username} ({self.estado})"
       
-    def cerrar(self, usuario_cierre, monto_final_real):
+    def cerrar(self, usuario_cierre, monto_final_real, monto_final_sistema):
         self.usuario_cierre = usuario_cierre
         self.monto_final_real = monto_final_real
+        self.monto_final_sistema = monto_final_sistema
         self.fecha_cierre = timezone.now()
-        self.diferencia = self.monto_final_real - self.monto_final_sistema
-        self.estado = "Cerrado"
+        self.diferencia = monto_final_real - monto_final_sistema
+        self.estado = "CERRADA"
         self.save()
+
