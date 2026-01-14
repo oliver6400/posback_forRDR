@@ -43,7 +43,7 @@ class ArqueoCajaViewSet(viewsets.ModelViewSet):
         ).first()
 
         if abierta_usuario:
-            return Response({"error": "Ya existe una caja abierta en este punto de venta."}, status=400)
+            return Response({"error": "El usuario ya tiene una caja abierta en otro punto de venta."}, status=400)
         
         # 🔒 Validar que el punto de venta no tenga caja abierta
         abierta = ArqueoCaja.objects.filter(
@@ -112,6 +112,24 @@ class ArqueoCajaViewSet(viewsets.ModelViewSet):
 
         arqueo = ArqueoCaja.objects.filter(
             punto_venta_id=punto_venta_id, 
+            estado="ABIERTA"
+        ).first()
+
+        if not arqueo:
+            return Response({"abierta": False}, status=200)
+
+        return Response({
+            "abierta": True,
+            "arqueo": ArqueoCajaSerializer(arqueo).data
+        }, status=200)
+    
+    # ✅ Acción: Buscar arqueo abierto por usuario
+    @action(detail=False, methods=['get'])
+    def abierta_usuario(self, request):
+        usuario = request.user
+
+        arqueo = ArqueoCaja.objects.filter(
+            usuario_apertura=usuario,
             estado="ABIERTA"
         ).first()
 
