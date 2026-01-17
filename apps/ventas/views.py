@@ -5,7 +5,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from apps.negocio.models import EstadoVenta
 from apps.reportes.models import ArqueoCaja
+from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Venta, DetalleVenta, MetodoPago, FacturaSimulada, VentaPago
 from .serializers import (
@@ -23,9 +25,19 @@ from apps.inventario.models import (
 )
 
 class VentaViewSet(viewsets.ModelViewSet):
-    queryset = Venta.objects.all()
+    queryset = Venta.objects.select_related(
+        "sucursal", "punto_venta", "usuario", "estado_venta"
+    ).prefetch_related("detalles")
     serializer_class = VentaSerializer
     permission_classes = [IsAuthenticated]
+
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = {
+        "estado_venta__nombre": ["exact"],
+        "fecha_hora": ["date", "gte", "lte"],
+        "punto_venta": ["exact"],
+        "sucursal": ["exact"],
+    }
 
     # El serializer necesita el request para CurrentUserDefault, etc.
     def get_serializer_context(self):
@@ -56,9 +68,12 @@ class VentaViewSet(viewsets.ModelViewSet):
         # Validar arqueo abierto ANTES de guardar
         self.validar_caja_abierta(usuario, punto_venta)
 
+        # 🔒 estado inicial garantizado
+        estado_pagada, _ = EstadoVenta.objects.get_or_create(nombre="PAGADA")
+
         serializer.save(
             usuario=usuario,
-            fecha_hora=timezone.now()
+            estado_venta=estado_pagada,
         )
 
     @action(detail=True, methods=["post"])
@@ -75,90 +90,64 @@ class VentaViewSet(viewsets.ModelViewSet):
             ser.save(venta=venta)
             return Response(ser.data, status=status.HTTP_201_CREATED)
         return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    
+    @action(detail=True, methods=["post"])
     @transaction.atomic
-    def perform_update(self, serializer):
-        usuario = self.request.user
-        venta_actual = self.get_object()
+    def anular(self, request, pk=None):
+        venta = self.get_object()
+        usuario = request.user
 
-        # Validar caja antes de permitir actualizaciones que impliquen stock o pagos
-        self.validar_caja_abierta(usuario, venta_actual.punto_venta)
+        # 🔒 Validar caja
+        self.validar_caja_abierta(usuario, venta.punto_venta)
 
-        venta_antes = Venta.objects.get(pk=venta_actual.pk)
-        estado_antes = venta_antes.estado_venta_id
+        if venta.estado_venta.nombre == "ANULADA":
+            return Response(
+                {"detail": "La venta ya está anulada."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        venta = serializer.save()
-        estado_despues = venta.estado_venta_id
+        estado_anulada, _ = EstadoVenta.objects.get_or_create(nombre="ANULADA")
 
-        EN_PROCESO = 1
-        PAGADA = 2
-        ANULADA = 3
-
-        # ---- PAGADA ----
-        if estado_antes != PAGADA and estado_despues == PAGADA:
-            existe_salida = MovimientoInventario.objects.filter(
+        # 🔁 Devolver stock
+        for det in venta.detalles.select_for_update():
+            inventario, _ = InventarioSucursal.objects.select_for_update().get_or_create(
                 sucursal=venta.sucursal,
-                origen_tipo="VENTA",
-                origen_id=venta.id,
-                tipo_movimiento="Salida",
-            ).exists()
+                producto=det.producto,
+                defaults={"stock_actual": 0, "stock_minimo": 0},
+            )
+            inventario.stock_actual += det.cantidad
+            inventario.save()
 
-            if not existe_salida:
-                mov = MovimientoInventario.objects.create(
-                    sucursal=venta.sucursal,
-                    usuario=usuario,
-                    tipo_movimiento="Salida",
-                    origen_tipo="VENTA",
-                    origen_id=venta.id,
-                    observacion=f"Venta {venta.id} pagada (consumo de reserva)",
-                )
-                for det in venta.detalles.all():
-                    MovimientoInventarioDetalle.objects.create(
-                        movimiento=mov,
-                        producto=det.producto,
-                        cantidad=det.cantidad,
-                        costo_unitario=det.precio_unitario,
-                    )
+        # 📦 Registrar movimiento
+        mov = MovimientoInventario.objects.create(
+            sucursal=venta.sucursal,
+            usuario=usuario,
+            tipo_movimiento="Entrada",
+            origen_tipo="ANULACION_VENTA",
+            origen_id=venta.id,
+            observacion=f"Anulación de venta {venta.id}",
+        )
 
-        # ---- ANULADA ----
-        elif estado_antes in (EN_PROCESO, PAGADA) and estado_despues == ANULADA:
+        for det in venta.detalles.all():
+            MovimientoInventarioDetalle.objects.create(
+                movimiento=mov,
+                producto=det.producto,
+                cantidad=det.cantidad,
+                costo_unitario=det.precio_unitario,
+            )
 
-            # 1) devolver stock
-            for det in venta.detalles.select_for_update():
-                inv, _ = InventarioSucursal.objects.select_for_update().get_or_create(
-                    sucursal=venta.sucursal,
-                    producto=det.producto,
-                    defaults={"stock_actual": 0, "stock_minimo": 0},
-                )
-                inv.stock_actual += det.cantidad
-                inv.save()
+        # 🔄 Cambiar estado
+        venta.estado_venta = estado_anulada
+        venta.save()
 
-            # 2) registrar movimiento
-            if estado_antes == PAGADA:
-                existe_entrada = MovimientoInventario.objects.filter(
-                    sucursal=venta.sucursal,
-                    origen_tipo="ANULACION_VENTA",
-                    origen_id=venta.id,
-                    tipo_movimiento="Entrada",
-                ).exists()
+        return Response(
+            {"detail": f"Venta {venta.id} anulada correctamente."},
+            status=status.HTTP_200_OK,
+        )
 
-                if not existe_entrada:
-                    mov = MovimientoInventario.objects.create(
-                        sucursal=venta.sucursal,
-                        usuario=usuario,
-                        tipo_movimiento="Entrada",
-                        origen_tipo="ANULACION_VENTA",
-                        origen_id=venta.id,
-                        observacion=f"Anulación de venta {venta.id}",
-                    )
-                    for det in venta.detalles.all():
-                        MovimientoInventarioDetalle.objects.create(
-                            movimiento=mov,
-                            producto=det.producto,
-                            cantidad=det.cantidad,
-                            costo_unitario=det.precio_unitario,
-                        )
-                        
+    def perform_update(self, serializer):
+        raise ValidationError("Las ventas no se pueden modificar directamente.")
+
 class FacturaSimuladaViewSet(viewsets.ModelViewSet):
     queryset = FacturaSimulada.objects.all()
     serializer_class = FacturaSimuladaSerializer

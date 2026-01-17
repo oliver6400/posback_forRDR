@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Venta, DetalleVenta, MetodoPago, FacturaSimulada, VentaPago
 from apps.inventario.models import InventarioSucursal
 from apps.reportes.models import ArqueoCaja
+from apps.ventas.models import EstadoVenta
 from django.db import transaction
 
 class DetalleVentaSerializer(serializers.ModelSerializer):
@@ -17,35 +18,7 @@ class VentaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Venta
         fields = "__all__"
-        read_only_fields = ("usuario", "total_bruto", "total_descuento", "total_neto")
-
-    def validate(self, data):
-        usuario = self.context["request"].user
-        punto_venta = data.get("punto_venta")
-        sucursal = data.get("sucursal")
-
-        if not sucursal:
-            raise serializers.ValidationError("Debe seleccionar una sucursal.")
-
-        if not punto_venta:
-            raise serializers.ValidationError("Debe seleccionar un punto de venta.")
-
-        # Validar relación
-        if punto_venta.sucursal_id != sucursal.id:
-            raise serializers.ValidationError("El punto de venta no pertenece a esa sucursal.")
-
-        # Validar caja abierta
-        caja_abierta = ArqueoCaja.objects.filter(
-            usuario_apertura=usuario,
-            punto_venta=punto_venta,
-            estado="ABIERTA"
-        ).first()
-
-        if not caja_abierta:
-            raise serializers.ValidationError("Debe aperturar una caja para este punto de venta.")
-
-        return data
-
+        read_only_fields = ("usuario", "estado_venta", "total_bruto", "total_descuento", "total_neto")
 
     @transaction.atomic
     def create(self, validated_data):
