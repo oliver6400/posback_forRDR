@@ -18,7 +18,7 @@ class Cliente(models.Model):
     
 
 class EstadoVenta(models.Model):
-    nombre = models.CharField(max_length=50)
+    nombre = models.CharField(max_length=50, unique=True)
 
     class Meta:
         app_label = 'negocio'

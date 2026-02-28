@@ -1,9 +1,14 @@
 from django.db import transaction
-from rest_framework import status, viewsets, serializers
+from django.utils import timezone
+from datetime import datetime, time
+from django.db.models import F, Sum, Count
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.utils import timezone
+from django.db.models import Sum, Count
+from decimal import Decimal
+from django.utils.dateparse import parse_date
 from django.core.exceptions import ValidationError
 from apps.negocio.models import EstadoVenta
 from apps.reportes.models import ArqueoCaja
@@ -147,6 +152,84 @@ class VentaViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         raise ValidationError("Las ventas no se pueden modificar directamente.")
+    
+    @action(detail=False, methods=["get"])
+    def dashboard(self, request):
+
+        sucursal_id = request.query_params.get("sucursal")
+        fecha = request.query_params.get("fecha")
+        fecha_inicio = request.query_params.get("fecha_inicio")
+        fecha_fin = request.query_params.get("fecha_fin")
+
+        if not sucursal_id:
+            return Response({"detail": "Debe enviar sucursal."}, status=400)
+
+        ventas = Venta.objects.filter(sucursal_id=sucursal_id)
+
+        inicio = None
+        fin = None
+
+        if fecha:
+            fecha_obj = parse_date(fecha)
+            inicio = timezone.make_aware(datetime.combine(fecha_obj, time.min))
+            fin = timezone.make_aware(datetime.combine(fecha_obj, time.max))
+
+        elif fecha_inicio and fecha_fin:
+            inicio = timezone.make_aware(datetime.combine(parse_date(fecha_inicio), time.min))
+            fin = timezone.make_aware(datetime.combine(parse_date(fecha_fin), time.max))
+
+        if inicio and fin:
+            ventas = ventas.filter(fecha_hora__range=(inicio, fin))
+
+        ventas = ventas.exclude(estado_venta__nombre="ANULADA")
+
+        data = ventas.aggregate(
+            total=Sum("total_neto"),
+            cantidad=Count("id")
+        )
+
+        total = data["total"] or Decimal("0.00")
+        cantidad = data["cantidad"] or 0
+        ticket_promedio = total / cantidad if cantidad > 0 else Decimal("0.00")
+
+        ranking = (
+            DetalleVenta.objects
+            .filter(
+                venta__sucursal_id=sucursal_id,
+                venta__fecha_hora__range=(inicio, fin),
+            )
+            .exclude(venta__estado_venta__nombre="ANULADA")
+            .values("producto__nombre")
+            .annotate(
+                cantidad_total=Sum("cantidad"),
+                total_generado=Sum(F("cantidad") * F("precio_unitario"))
+            )
+            .order_by("-cantidad_total")[:10]
+        )
+
+        return Response({
+            "total_vendido": total,
+            "cantidad_ventas": cantidad,
+            "ticket_promedio": ticket_promedio,
+            "ranking_productos": list(ranking)
+        })
+    
+    def get_queryset(self):
+        queryset = Venta.objects.all()
+
+        sucursal = self.request.query_params.get('sucursal')
+        fecha = self.request.query_params.get('fecha')
+
+        if sucursal:
+            queryset = queryset.filter(sucursal_id=sucursal)
+
+        if fecha:
+            fecha_obj = parse_date(fecha)
+            inicio = timezone.make_aware(datetime.combine(fecha_obj, time.min))
+            fin = timezone.make_aware(datetime.combine(fecha_obj, time.max))
+            queryset = queryset.filter(fecha_hora__range=(inicio, fin))
+
+        return queryset
 
 class FacturaSimuladaViewSet(viewsets.ModelViewSet):
     queryset = FacturaSimulada.objects.all()

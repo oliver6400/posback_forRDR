@@ -1,3 +1,4 @@
+#core/settings.py
 from pathlib import Path
 import sys 
 import os 
@@ -161,7 +162,7 @@ AUTH_USER_MODEL = 'usuarios.Usuario'
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/La_Paz'
 
 USE_I18N = True
 
