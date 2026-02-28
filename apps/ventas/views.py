@@ -10,6 +10,7 @@ from django.db.models import Sum, Count
 from decimal import Decimal
 from django.utils.dateparse import parse_date
 from django.core.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from apps.negocio.models import EstadoVenta
 from apps.reportes.models import ArqueoCaja
 from django_filters.rest_framework import DjangoFilterBackend
@@ -171,12 +172,18 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         if fecha:
             fecha_obj = parse_date(fecha)
+            if not fecha_obj:
+                return Response({"detail": "Fecha inválida. Use el formato YYYY-MM-DD."}, status=400)
             inicio = timezone.make_aware(datetime.combine(fecha_obj, time.min))
             fin = timezone.make_aware(datetime.combine(fecha_obj, time.max))
 
         elif fecha_inicio and fecha_fin:
-            inicio = timezone.make_aware(datetime.combine(parse_date(fecha_inicio), time.min))
-            fin = timezone.make_aware(datetime.combine(parse_date(fecha_fin), time.max))
+            fecha_inicio_obj = parse_date(fecha_inicio)
+            fecha_fin_obj = parse_date(fecha_fin)
+            if not fecha_inicio_obj or not fecha_fin_obj:
+                return Response({"detail": "Rango de fechas inválido. Use el formato YYYY-MM-DD."}, status=400)
+            inicio = timezone.make_aware(datetime.combine(fecha_inicio_obj, time.min))
+            fin = timezone.make_aware(datetime.combine(fecha_fin_obj, time.max))
 
         if inicio and fin:
             ventas = ventas.filter(fecha_hora__range=(inicio, fin))
@@ -192,14 +199,15 @@ class VentaViewSet(viewsets.ModelViewSet):
         cantidad = data["cantidad"] or 0
         ticket_promedio = total / cantidad if cantidad > 0 else Decimal("0.00")
 
+        ranking = DetalleVenta.objects.filter(
+            venta__sucursal_id=sucursal_id,
+        ).exclude(venta__estado_venta__nombre="ANULADA")
+
+        if inicio and fin:
+            ranking = ranking.filter(venta__fecha_hora__range=(inicio, fin))
+
         ranking = (
-            DetalleVenta.objects
-            .filter(
-                venta__sucursal_id=sucursal_id,
-                venta__fecha_hora__range=(inicio, fin),
-            )
-            .exclude(venta__estado_venta__nombre="ANULADA")
-            .values("producto__nombre")
+            ranking.values("producto__nombre")
             .annotate(
                 cantidad_total=Sum("cantidad"),
                 total_generado=Sum(F("cantidad") * F("precio_unitario"))
@@ -225,6 +233,8 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         if fecha:
             fecha_obj = parse_date(fecha)
+            if not fecha_obj:
+                raise DRFValidationError("Fecha inválida. Use el formato YYYY-MM-DD.")
             inicio = timezone.make_aware(datetime.combine(fecha_obj, time.min))
             fin = timezone.make_aware(datetime.combine(fecha_obj, time.max))
             queryset = queryset.filter(fecha_hora__range=(inicio, fin))
