@@ -251,7 +251,7 @@ class FacturaSimuladaViewSet(viewsets.ModelViewSet):
         """Generar factura simulada"""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        factura = serializer.save()
+        serializer.save()
         return Response({
             "mensaje": "Factura simulada generada con éxito",
             "factura": serializer.data
