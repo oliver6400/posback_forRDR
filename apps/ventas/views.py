@@ -264,8 +264,8 @@ class MetodoPagoViewSet(viewsets.ModelViewSet):
 
 
 class DetalleVentaViewSet(viewsets.ModelViewSet):
-    queryset = DetalleVenta.objects.all()
-    serializer_class = DetalleVentaSerializer
+    queryset = VentaPago.objects.select_related("venta", "metodo_pago")
+    serializer_class = VentaPagoSerializer
     permission_classes = [IsAuthenticated]
 
 
@@ -275,8 +275,28 @@ class VentaPagoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['post'])
+    @staticmethod
+    def _resumen_pago_venta(venta):
+        total_pagado = (
+            VentaPago.objects.filter(venta=venta).aggregate(total=Sum("monto"))["total"]
+            or Decimal("0.00")
+        )
+        total_venta = venta.total_neto or Decimal("0.00")
+        cambio = max(total_pagado - total_venta, Decimal("0.00"))
+        pendiente = max(total_venta - total_pagado, Decimal("0.00"))
+
+        return {
+            "total_venta": total_venta,
+            "total_pagado": total_pagado,
+            "pendiente": pendiente,
+            "cambio": cambio,
+            "pagada_completa": pendiente == Decimal("0.00"),
+        }
+    
+    @action(detail=False, methods=["post"])
     def registrar_pago(self, request):
         """Registrar un pago para una venta"""
+        """Registrar uno o más pagos por venta y calcular pendiente/cambio."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         pago = serializer.save()
@@ -285,4 +305,12 @@ class VentaPagoViewSet(viewsets.ModelViewSet):
             "pago": serializer.data
         })   
 
+        resumen = self._resumen_pago_venta(pago.venta)
 
+        return Response(
+            {
+                "mensaje": "Pago registrado con éxito",
+                "pago": serializer.data,
+                "resumen_pago": resumen,
+            }
+        )

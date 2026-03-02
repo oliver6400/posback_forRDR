@@ -118,14 +118,7 @@ class VentaPagoSerializer(serializers.ModelSerializer):
         model = VentaPago
         fields = ["id", "venta_id", "metodo_pago", "metodo_pago_id", "monto", "referencia"]
 
-    def validate(self, attrs):
-        venta = attrs["venta"]
-        monto_nuevo = attrs["monto"]
-
-        total_pagado = (
-            VentaPago.objects.filter(venta=venta).aggregate(total=Sum("monto"))["total"] or 0
-        )
-        if (total_pagado + monto_nuevo) > venta.total_neto:
-            raise serializers.ValidationError("El monto excede el total pendiente de la venta.")
-
-        return attrs
+    def validate_monto(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("El monto del pago debe ser mayor a cero.")
+        return value
