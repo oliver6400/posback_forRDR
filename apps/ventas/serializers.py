@@ -1,9 +1,10 @@
-from rest_framework import serializers
-from .models import Venta, DetalleVenta, MetodoPago, FacturaSimulada, VentaPago
-from apps.inventario.models import InventarioSucursal
-from apps.reportes.models import ArqueoCaja
-from apps.ventas.models import EstadoVenta
 from django.db import transaction
+from rest_framework import serializers
+
+from apps.inventario.models import InventarioSucursal
+
+from .models import Venta, DetalleVenta, MetodoPago, FacturaSimulada, VentaPago
+
 
 class DetalleVentaSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.CharField(source="producto.nombre", read_only=True)
@@ -11,7 +12,8 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
     class Meta:
         model = DetalleVenta
         fields = ["id", "producto", "producto_nombre", "cantidad", "precio_unitario", "descuento", "subtotal"]
-        
+
+
 class VentaSerializer(serializers.ModelSerializer):
     detalles = DetalleVentaSerializer(many=True)
 
@@ -37,13 +39,14 @@ class VentaSerializer(serializers.ModelSerializer):
             precio_unitario = detalle_data["precio_unitario"]
             descuento = detalle_data.get("descuento", 0)
 
-            # 🔒 Bloquear fila de inventario para evitar condiciones de carrera
             try:
                 inventario = InventarioSucursal.objects.select_for_update().get(
                     sucursal=venta.sucursal, producto=producto
                 )
-            except InventarioSucursal.DoesNotExist:
-                raise serializers.ValidationError(f"El producto {producto.nombre} no tiene stock en esta sucursal.")
+            except InventarioSucursal.DoesNotExist as exc:
+                raise serializers.ValidationError(
+                    f"El producto {producto.nombre} no tiene stock en esta sucursal."
+                ) from exc
 
             if inventario.stock_actual < cantidad:
                 raise serializers.ValidationError(f"No hay suficiente stock de {producto.nombre}.")
@@ -69,15 +72,37 @@ class VentaSerializer(serializers.ModelSerializer):
 
         return venta
 
+
 class FacturaSimuladaSerializer(serializers.ModelSerializer):
+    venta_id = serializers.PrimaryKeyRelatedField(
+        queryset=Venta.objects.all(), source="venta", write_only=True
+    )
+
     class Meta:
         model = FacturaSimulada
-        fields = ["id", "nit_ci", "razon_social", "numero_factura", "fecha_emision"]
+        fields = [
+            "id",
+            "venta",
+            "venta_id",
+            "nit_ci",
+            "razon_social",
+            "numero_factura",
+            "fecha_emision",
+        ]
+        read_only_fields = ["venta"]
+
+    def validate(self, attrs):
+        venta = attrs.get("venta")
+        if venta and FacturaSimulada.objects.filter(venta=venta).exists():
+            raise serializers.ValidationError("La venta ya tiene una factura simulada.")
+        return attrs
+
 
 class MetodoPagoSerializer(serializers.ModelSerializer):
     class Meta:
         model = MetodoPago
         fields = "__all__"
+
 
 class VentaPagoSerializer(serializers.ModelSerializer):
     metodo_pago = MetodoPagoSerializer(read_only=True)
@@ -92,4 +117,7 @@ class VentaPagoSerializer(serializers.ModelSerializer):
         model = VentaPago
         fields = ["id", "venta_id", "metodo_pago", "metodo_pago_id", "monto", "referencia"]
 
-    
+    def validate_monto(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("El monto del pago debe ser mayor a cero.")
+        return value

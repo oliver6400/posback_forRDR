@@ -3,6 +3,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from apps.usuarios.permissions import IsAdminOrSuperAdmin
 from rest_framework import viewsets, filters
 from rest_framework.exceptions import APIException, ValidationError
 from django.db import IntegrityError, transaction
@@ -22,7 +23,7 @@ from .serializers import (
 class ProductoViewSet(viewsets.ModelViewSet):
     queryset = Producto.objects.all()
     serializer_class = ProductoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
     
     filter_backends = [filters.SearchFilter]
     search_fields = ['codigo_barras', 'codigo', 'nombre'] 
@@ -30,7 +31,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
 class MovimientoInventarioViewSet(viewsets.ModelViewSet):
     queryset = MovimientoInventario.objects.all().order_by("-fecha_hora")
     serializer_class = MovimientoInventarioSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
 
     @action(detail=False, methods=["post"])
     def entrada(self, request):
@@ -101,7 +102,7 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
 class InventarioSucursalViewSet(viewsets.ModelViewSet):
     queryset = InventarioSucursal.objects.all()
     serializer_class = InventarioSucursalSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
 
     @action(detail=False, methods=['get'])
     def bajo_stock(self, request):
@@ -136,9 +137,9 @@ class InventarioSucursalViewSet(viewsets.ModelViewSet):
 class ImagenProductoViewSet(viewsets.ModelViewSet):
     queryset = ImagenProducto.objects.all()
     serializer_class = ImagenProductoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
 
 class MovimientoInventarioDetalleViewSet(viewsets.ModelViewSet):
     queryset = MovimientoInventarioDetalle.objects.all()
     serializer_class = MovimientoInventarioDetalleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
