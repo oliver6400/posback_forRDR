@@ -11,23 +11,24 @@ from .serializers import (
 )
 from django.shortcuts import render
 from rest_framework.permissions import IsAuthenticated
+from apps.usuarios.permissions import IsSuperAdmin, IsAdminOrSuperAdmin
 
 class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
     filter_backends = [filters.SearchFilter]
     search_fields = ['nit', 'nombre', 'razon_social']
     
 class SucursalViewSet(viewsets.ModelViewSet):
     queryset = Sucursal.objects.all()
     serializer_class = SucursalSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
 
 class PuntoVentaViewSet(viewsets.ModelViewSet):
     queryset = PuntoVenta.objects.all()
     serializer_class = PuntoVentaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
 
     def get_queryset(self):
         sucursal_id = self.request.query_params.get('sucursal')
@@ -38,7 +39,7 @@ class PuntoVentaViewSet(viewsets.ModelViewSet):
 class ClienteListView(viewsets.ViewSet):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSuperAdmin]
 
     def list(self, request):
         clientes = Cliente.objects.all()
@@ -48,9 +49,9 @@ class ClienteListView(viewsets.ViewSet):
 class EstadoVentaViewSet(viewsets.ModelViewSet):
     queryset = EstadoVenta.objects.all()
     serializer_class = EstadoVentaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdmin]
 
 class CiudadViewSet(viewsets.ModelViewSet):
     queryset = Ciudad.objects.all()
     serializer_class = CiudadSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdmin]

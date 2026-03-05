@@ -6,7 +6,6 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.db.models import Sum, Count
 from decimal import Decimal
 from django.utils.dateparse import parse_date
 from django.core.exceptions import ValidationError
@@ -270,11 +269,10 @@ class DetalleVentaViewSet(viewsets.ModelViewSet):
 
 
 class VentaPagoViewSet(viewsets.ModelViewSet):
-    queryset = VentaPago.objects.all()
-    serializer_class = VentaPagoSerializer   # ⚠️ esto deberías cambiarlo
+    queryset = VentaPago.objects.select_related("venta", "metodo_pago")
+    serializer_class = VentaPagoSerializer
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['post'])
     @staticmethod
     def _resumen_pago_venta(venta):
         total_pagado = (
@@ -292,18 +290,23 @@ class VentaPagoViewSet(viewsets.ModelViewSet):
             "cambio": cambio,
             "pagada_completa": pendiente == Decimal("0.00"),
         }
-    
+
     @action(detail=False, methods=["post"])
     def registrar_pago(self, request):
-        """Registrar un pago para una venta"""
         """Registrar uno o más pagos por venta y calcular pendiente/cambio."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         pago = serializer.save()
-        return Response({
-            "mensaje": "Pago registrado con éxito",
-            "pago": serializer.data
-        })   
+
+        resumen = self._resumen_pago_venta(pago.venta)
+
+        return Response(
+            {
+                "mensaje": "Pago registrado con éxito",
+                "pago": serializer.data,
+                "resumen_pago": resumen,
+            }
+        )
 
         resumen = self._resumen_pago_venta(pago.venta)
 
