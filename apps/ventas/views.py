@@ -263,8 +263,8 @@ class MetodoPagoViewSet(viewsets.ModelViewSet):
 
 
 class DetalleVentaViewSet(viewsets.ModelViewSet):
-    queryset = DetalleVenta.objects.all()
-    serializer_class = DetalleVentaSerializer
+    queryset = VentaPago.objects.select_related("venta", "metodo_pago")
+    serializer_class = VentaPagoSerializer
     permission_classes = [IsAuthenticated]
 
 
@@ -308,4 +308,12 @@ class VentaPagoViewSet(viewsets.ModelViewSet):
             }
         )
 
+        resumen = self._resumen_pago_venta(pago.venta)
 
+        return Response(
+            {
+                "mensaje": "Pago registrado con éxito",
+                "pago": serializer.data,
+                "resumen_pago": resumen,
+            }
+        )
