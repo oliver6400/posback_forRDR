@@ -1,11 +1,17 @@
 from rest_framework import viewsets
+from datetime import timedelta
+from django.utils import timezone
+from django.db.models import Sum, Count
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import LogAuditoria, ArqueoCaja
 from apps.negocio.models import PuntoVenta
-from apps.ventas.models import Venta
+from apps.ventas.models import Venta, DetalleVenta
 from .serializers import LogAuditoriaSerializer, ArqueoCajaSerializer
 from rest_framework.permissions import IsAuthenticated
+from apps.inventario.models import InventarioSucursal
+from apps.usuarios.permissions import IsSupervisorOrHigher
+from .services import proyectar_reposicion_por_producto
 
 class LogAuditoriaViewSet(viewsets.ModelViewSet):
     queryset = LogAuditoria.objects.all()
@@ -140,3 +146,73 @@ class ArqueoCajaViewSet(viewsets.ModelViewSet):
             "abierta": True,
             "arqueo": ArqueoCajaSerializer(arqueo).data
         }, status=200)
+    
+class AnaliticaVentasViewSet(viewsets.ViewSet):
+    permission_classes = [IsSupervisorOrHigher]
+
+    @action(detail=False, methods=["get"], url_path="prediccion-reposicion")
+    def prediccion_reposicion(self, request):
+        sucursal_id = request.query_params.get("sucursal")
+        dias_historial = int(request.query_params.get("dias_historial", 30))
+        dias_prediccion = int(request.query_params.get("dias_prediccion", 14))
+
+        if not sucursal_id:
+            return Response({"detail": "Debe enviar sucursal."}, status=400)
+        if dias_historial <= 0 or dias_prediccion <= 0:
+            return Response({"detail": "dias_historial y dias_prediccion deben ser mayores a cero."}, status=400)
+
+        fecha_inicio = timezone.now() - timedelta(days=dias_historial)
+
+        ventas_detalle = (
+            DetalleVenta.objects.filter(
+                venta__sucursal_id=sucursal_id,
+                venta__fecha_hora__gte=fecha_inicio,
+            )
+            .exclude(venta__estado_venta__nombre="ANULADA")
+            .values("producto_id", "producto__nombre")
+            .annotate(
+                cantidad_vendida=Sum("cantidad"),
+                dias_con_venta=Count("venta__fecha_hora__date", distinct=True),
+            )
+            .order_by("producto__nombre")
+        )
+
+        inventario_map = {
+            inv["producto_id"]: inv["stock_actual"]
+            for inv in InventarioSucursal.objects.filter(sucursal_id=sucursal_id).values("producto_id", "stock_actual")
+        }
+
+        predicciones = []
+        for row in ventas_detalle:
+            proyeccion = proyectar_reposicion_por_producto(
+                cantidad_vendida=row["cantidad_vendida"],
+                dias_historial=dias_historial,
+                dias_prediccion=dias_prediccion,
+                stock_actual=inventario_map.get(row["producto_id"], 0),
+            )
+
+            frecuencia = round(dias_historial / row["dias_con_venta"], 2) if row["dias_con_venta"] else None
+
+            predicciones.append(
+                {
+                    "producto_id": row["producto_id"],
+                    "producto": row["producto__nombre"],
+                    "cantidad_vendida_historial": row["cantidad_vendida"],
+                    "dias_con_venta": row["dias_con_venta"],
+                    "frecuencia_reposicion_dias": frecuencia,
+                    "stock_actual": inventario_map.get(row["producto_id"], 0),
+                    **proyeccion,
+                }
+            )
+
+        predicciones.sort(key=lambda x: x["sugerido_reponer"], reverse=True)
+
+        return Response(
+            {
+                "sucursal": int(sucursal_id),
+                "dias_historial": dias_historial,
+                "dias_prediccion": dias_prediccion,
+                "total_productos_analizados": len(predicciones),
+                "predicciones": predicciones,
+            }
+        )

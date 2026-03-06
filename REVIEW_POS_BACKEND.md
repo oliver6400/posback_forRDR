@@ -43,3 +43,30 @@ Actualmente el proyecto solo maneja `FacturaSimulada`. Para una facturación ele
 2. Definir modelo `FacturaElectronica` con estados y metadatos de validación.
 3. Implementar servicio de emisión asincrónica (cola + reintentos).
 4. Incorporar pruebas automatizadas de flujo fiscal (unitarias + integración).
+
+## IA para predicción de reposición (implementado)
+
+Se incorporó un endpoint de analítica para apoyar decisiones de reposición:
+
+- Ruta base: `reportes/analitica-ventas/prediccion-reposicion/`
+- Parámetros:
+  - `sucursal` (requerido)
+  - `dias_historial` (opcional, por defecto 30)
+  - `dias_prediccion` (opcional, por defecto 14)
+- Salida por producto:
+  - `promedio_diario`
+  - `demanda_predicha`
+  - `stock_actual`
+  - `sugerido_reponer`
+  - `frecuencia_reposicion_dias`
+
+Esto habilita un motor de recomendación inicial basado en ventas recientes para sugerir cuánto reponer y cada cuánto revisar reposición.
+
+## Facturación electrónica real (estado)
+
+La base sigue siendo de factura simulada. Para cerrar completamente la funcionalidad de facturación electrónica aún se requiere:
+
+- Integración formal con el proveedor/servicio fiscal.
+- Firma digital y trazabilidad de envío/acuse.
+- Estados fiscales completos y contingencia.
+- Reintentos automáticos y cola de emisión.
