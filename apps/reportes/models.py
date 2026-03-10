@@ -1,3 +1,4 @@
+# apps/reportes/models.py
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager, PermissionsMixin
 from apps.usuarios.models import Usuario

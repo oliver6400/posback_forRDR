@@ -1,3 +1,4 @@
+# apps/inventario/models.py
 from django.db import models, transaction
 from django.contrib.auth.models import AbstractUser, BaseUserManager, PermissionsMixin
 from apps.negocio.models import Sucursal
